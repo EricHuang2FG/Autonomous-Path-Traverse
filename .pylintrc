@@ -1,0 +1,5 @@
+[MASTER]
+extension-pkg-whitelist=pygame
+
+[TYPECHECK]
+generated-members=pygame.*
