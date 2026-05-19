@@ -1,5 +1,6 @@
 import pygame
-from src.sim.objects import Path, Entity
+from src.objects.path import Path
+from src.objects.entity import Entity
 from src.utils.constants import WINDOW_SIZE, FPS, COLOUR_BLACK
 
 
@@ -37,18 +38,14 @@ class Simulation:
             self.run_sim = self.check_run()
 
             if self.simulation_state == Simulation.SIMULATION_STATE_RESET:
-                self.path.erase_path(self.window)
                 self.path.generate_path()
                 self.simulation_state = Simulation.SIMULATION_STATE_RUNNING
-                self.entity.set_position(list(self.path.get_starting_position()))
+                self.entity.reset_entity(list(self.path.get_starting_position()))
 
             elif self.simulation_state == Simulation.SIMULATION_STATE_RUNNING:
                 self.entity.move(controlled_by_keyboard=controlled_by_keyboard)
 
-                if (
-                    self.entity.get_distance_to_point(self.path.get_ending_position())
-                    < Simulation.SIMULATION_TRAVERSAL_COMPLETE_DISTANCE_THRESHOLD
-                ):
+                if self.path.is_traversal_complete(self.entity):
                     self.simulation_state = Simulation.SIMULATION_STATE_RESET
 
             self.draw_background(COLOUR_BLACK)
