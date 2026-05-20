@@ -11,7 +11,7 @@ from src.utils.constants import DEVICE_CPU, WINDOW_SIZE
 
 class Environment(EnvBase):
 
-    DOWNWARD_PROGRESS_REWARD_SCALE: float = 0.2
+    DOWNWARD_PROGRESS_REWARD_SCALE: float = 0.25
     LINEAR_DEVIATION_PENALTY_SCALE: float = 0.0025
     ANGULAR_DEVIATION_PENALTY_SCALE: float = 0.005
 
@@ -78,7 +78,12 @@ class Environment(EnvBase):
         self.entity.reset_entity(list(self.path.get_starting_position()))
 
         return TensorDict(
-            {"observation": torch.tensor(self._get_observation(), dtype=torch.float32)},
+            {
+                "observation": torch.tensor(
+                    Environment.get_observation(self.path, self.entity),
+                    dtype=torch.float32,
+                )
+            },
             batch_size=[],
         )
 
@@ -93,7 +98,9 @@ class Environment(EnvBase):
             controlled_by_keyboard=False, steering=steering, throttle=throttle
         )
 
-        observation: tuple[float, float, float, float] = self._get_observation()
+        observation: tuple[float, float, float, float] = Environment.get_observation(
+            self.path, self.entity
+        )
         reward: float = self._get_reward(
             self.entity.position[1] - prev_y_coordinate, observation[0], observation[1]
         )
@@ -114,7 +121,10 @@ class Environment(EnvBase):
             batch_size=[],
         )
 
-    def _get_observation(self) -> tuple[float, float, float, float]:
+    @staticmethod
+    def get_observation(
+        path: Path, entity: Entity
+    ) -> tuple[float, float, float, float]:
         """
         Gets necessary observations for the entity. Using the path segment that the entity is currently the
         closest to, it determines, 1), the signed linear deviation of position from the line segment, 2), the
@@ -130,7 +140,7 @@ class Environment(EnvBase):
             the angle between the current and the next line segment, and the normalized speed of the entity.
         """
 
-        position: np.ndarray = np.array(self.entity.position)
+        position: np.ndarray = np.array(entity.position)
 
         # -1 represents left when moving in the downward direction
         # 1 represents right when moving in the downward direction
@@ -139,12 +149,12 @@ class Environment(EnvBase):
         angular_deviation: float = float("inf")
         angle_to_next_segment: float = 0.0
 
-        for index, start in enumerate(self.path.vertices):
-            if index == len(self.path.vertices) - 1:  # if at the last point
+        for index, start in enumerate(path.vertices):
+            if index == len(path.vertices) - 1:  # if at the last point
                 break
 
             start: np.ndarray = np.array(start)
-            end: np.ndarray = np.array(self.path.vertices[index + 1])
+            end: np.ndarray = np.array(path.vertices[index + 1])
 
             segment_vector: np.ndarray = end - start
             segment_length: float = np.linalg.norm(segment_vector)
@@ -157,13 +167,13 @@ class Environment(EnvBase):
             projection_normalized: float = (
                 np.dot(segment_vector, position - start) / segment_length**2
             )
+            if projection_normalized > 1:  # move on to the next segment
+                continue
 
             cross_product: float = np.cross(segment_vector, position - start)
             if projection_normalized < 0:  # closer to start
                 curr_linear_deviation: float = np.linalg.norm(start - position)
-            elif projection_normalized > 1:  # closer to end
-                curr_linear_deviation: float = np.linalg.norm(end - position)
-            else:
+            else:  # distance from segment less than distant to endpoint
                 curr_linear_deviation: float = (
                     np.linalg.norm(cross_product) / segment_length
                 )
@@ -178,24 +188,20 @@ class Environment(EnvBase):
 
                 # determine the angular deviation
                 # note that the segment_direction is constrained between 0 and pi
-                segment_direction: float = self.path.get_segment_direction(
-                    segment_vector
-                )
+                segment_direction: float = path.get_segment_direction(segment_vector)
                 # compute angular_deviation and wrap the angle such that
                 # the deviation takes on [-pi, pi]
-                angular_deviation = (
-                    segment_direction - self.entity.direction + math.pi
-                ) % (2 * math.pi) - math.pi
+                angular_deviation = (segment_direction - entity.direction + math.pi) % (
+                    2 * math.pi
+                ) - math.pi
 
                 # determine the angle between the current and the next segment
-                if (
-                    index != len(self.path.vertices) - 2
-                ):  # if there are still segments ahead
+                if index != len(path.vertices) - 2:  # if there are still segments ahead
                     next_segment_vector: np.ndarray = np.array(
-                        self.path.vertices[index + 2]
-                    ) - np.array(self.path.vertices[index + 1])
+                        path.vertices[index + 2]
+                    ) - np.array(path.vertices[index + 1])
                     angle_to_next_segment = (
-                        self.path.get_segment_direction(next_segment_vector)
+                        path.get_segment_direction(next_segment_vector)
                         - segment_direction
                     )
 
@@ -203,7 +209,7 @@ class Environment(EnvBase):
             min_linear_deviation * min_linear_deviation_sign,
             angular_deviation,
             angle_to_next_segment,
-            self.entity.speed / Entity.MAX_LINEAR_SPEED,
+            entity.speed / Entity.MAX_LINEAR_SPEED,
         )
 
     def _get_reward(

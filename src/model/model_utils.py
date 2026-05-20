@@ -23,7 +23,9 @@ from torchrl.collectors import SyncDataCollector
 def train_model(
     device: str = DEVICE_CPU, destination_path: str = "models/model.model"
 ) -> None:
-    device = DEVICE_GPU if torch.cuda.is_available() else DEVICE_CPU
+    device = (
+        DEVICE_GPU if device == DEVICE_GPU and torch.cuda.is_available() else DEVICE_CPU
+    )
 
     environment: Environment = Environment(device=device, seed=SEED)
     agent: Agent = Agent(device=device)
@@ -74,3 +76,17 @@ def train_model(
         },
         destination_path,
     )
+
+
+def load_model_from_file_for_eval(path: str, device: str = DEVICE_CPU) -> Agent:
+    agent: Agent = Agent(device=device)
+    load_agent: dict[str, dict[str, torch.Tensor]] = torch.load(
+        path, map_location=device
+    )
+    agent.actor.actor.load_state_dict(load_agent["actor"])
+    agent.critic.critic.load_state_dict(load_agent["critic"])
+
+    agent.actor.actor.eval()
+    agent.critic.critic.eval()
+
+    return agent
