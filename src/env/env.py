@@ -11,9 +11,10 @@ from src.utils.constants import DEVICE_CPU, WINDOW_SIZE
 
 class Environment(EnvBase):
 
-    DOWNWARD_PROGRESS_REWARD_SCALE: float = 0.25
+    DOWNWARD_PROGRESS_REWARD_SCALE: float = 0.35
     LINEAR_DEVIATION_PENALTY_SCALE: float = 0.0025
     ANGULAR_DEVIATION_PENALTY_SCALE: float = 0.005
+    LOW_SPEED_PENALTY_SCALE: float = 0.005
 
     MAX_LINEAR_DEVIATION: float = (
         50.0  # max linear deviation for episode to be terminated
@@ -98,13 +99,18 @@ class Environment(EnvBase):
             controlled_by_keyboard=False, steering=steering, throttle=throttle
         )
 
+        is_traversal_complete: bool = self.path.is_traversal_complete(self.entity)
+
         observation: tuple[float, float, float, float] = Environment.get_observation(
             self.path, self.entity
         )
         reward: float = self._get_reward(
-            self.entity.position[1] - prev_y_coordinate, observation[0], observation[1]
+            self.entity.position[1] - prev_y_coordinate,
+            observation[0],
+            observation[1],
+            is_traversal_complete,
         )
-        terminated: bool = self._is_terminated(observation[0])
+        terminated: bool = self._is_terminated(observation[0], is_traversal_complete)
 
         if terminated:
             print(
@@ -167,13 +173,13 @@ class Environment(EnvBase):
             projection_normalized: float = (
                 np.dot(segment_vector, position - start) / segment_length**2
             )
-            if projection_normalized > 1:  # move on to the next segment
-                continue
 
             cross_product: float = np.cross(segment_vector, position - start)
             if projection_normalized < 0:  # closer to start
                 curr_linear_deviation: float = np.linalg.norm(start - position)
-            else:  # distance from segment less than distant to endpoint
+            elif projection_normalized > 1:  # closer to end
+                curr_linear_deviation: float = np.linalg.norm(end - position)
+            else:
                 curr_linear_deviation: float = (
                     np.linalg.norm(cross_product) / segment_length
                 )
@@ -213,19 +219,33 @@ class Environment(EnvBase):
         )
 
     def _get_reward(
-        self, delta_y: float, linear_deviation: float, angular_deviation: float
+        self,
+        delta_y: float,
+        linear_deviation: float,
+        angular_deviation: float,
+        is_traversal_complete: bool,
     ) -> float:
         # reward for moving downwards toward end of path (penalty otherwise)
         # penalty for linear deviation
         # penalty for angular deviation
-        return (
+        # penalty for moving too slow
+        # reward for completing the path
+        # print((delta_y, linear_deviation, angular_deviation, is_traversal_complete))
+        reward: float = 10.0 if is_traversal_complete else 0.0
+        if math.isinf(linear_deviation) or math.isinf(angular_deviation):
+            return reward
+        return reward + (
             delta_y * Environment.DOWNWARD_PROGRESS_REWARD_SCALE
             - abs(linear_deviation) * Environment.LINEAR_DEVIATION_PENALTY_SCALE
             - abs(angular_deviation) * Environment.ANGULAR_DEVIATION_PENALTY_SCALE
+            - (1.0 - self.entity.speed / Entity.MAX_LINEAR_SPEED)
+            * Environment.LOW_SPEED_PENALTY_SCALE
         )
 
-    def _is_terminated(self, linear_deviation: float) -> bool:
+    def _is_terminated(
+        self, linear_deviation: float, is_traversal_complete: bool
+    ) -> bool:
         return (
-            self.path.is_traversal_complete(self.entity)
+            is_traversal_complete
             or abs(linear_deviation) > Environment.MAX_LINEAR_DEVIATION
         )

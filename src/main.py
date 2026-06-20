@@ -4,13 +4,13 @@ from src.utils.constants import DEVICE_CPU, DEVICE_GPU
 
 
 def main() -> None:
-    # train_model(device=DEVICE_CPU, destination_path="models/traverse.v1.model")
-    simulator: Simulation = Simulation(
-        controlled_by_keyboard=False,
-        model_path="models/traverse.v1.model",
-        device=DEVICE_CPU,
-    )
-    simulator.run()
+    train_model(device=DEVICE_CPU, destination_path="models/traverse.v2.model")
+    # simulator: Simulation = Simulation(
+    #     controlled_by_keyboard=False,
+    #     model_path="models/traverse.v1.model",
+    #     device=DEVICE_CPU,
+    # )
+    # simulator.run()
 
 
 if __name__ == "__main__":

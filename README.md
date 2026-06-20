@@ -1,1 +1,3 @@
+An Reinforcement Learning agent that autonomously traverse a 2D path.
+
 Under construction...
